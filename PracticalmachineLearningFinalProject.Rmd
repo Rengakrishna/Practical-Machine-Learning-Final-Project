@@ -1,0 +1,208 @@
+---
+title: "Practical Machine Learning Final Project"
+author: "Renga Pandurengan"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Project Instructions
+
+## What needs to be submitted
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Peer Review Portion
+
+Your submission for the Peer Review portion should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+
+## Course Project Prediction Quiz Portion
+
+Apply your machine learning algorithm to the 20 test cases available in the test data above and submit your predictions in appropriate format to the Course Project Prediction Quiz for automated grading.
+
+##  Reproducibility
+
+Due to security concerns with the exchange of R code, your code will not be run during the evaluation by your classmates. Please be sure that if they download the repo, they will be able to view the compiled HTML version of your analysis.
+
+## Loading Required Packages:
+
+```{r , echo=TRUE}
+
+library(ggplot2)
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(kernlab)
+
+```
+
+## Downloading train and test datasets
+
+```{r , echo=TRUE}
+train = read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv") 
+test =read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+## Data Clensing:
+
+* Eliminating Variables/Columns with "NA" values
+
+* Eliminating Variables/Columns that is not related to outcome variable
+
+* Eliminating Variables/Columns that have less variability
+
+```{r, echo=TRUE}
+train1 <-train[ , colSums(is.na(train))==0]#Removing Variables/Columns with "NA" values
+test1 <- test[, colSums(is.na(test))==0]
+train2 <- train1[,-c(1:7)]#removing first seven variables/Columns
+nsv <- nearZeroVar(train2)#Removing Variables/Columns that is not related to outcome variable
+train3 <- train2[,-nsv]
+```
+
+Cleaned data set to be used for modeling had 53 variables and 19622 observations
+
+## Partioning the data
+
+```{r , echo=TRUE}
+set.seed(1234)
+inTrain <- createDataPartition(y=train3$classe, p=0.7, list=F)
+training <- train3[inTrain,]
+validity <- train3[-inTrain,]
+
+```
+
+Of the modelling data set, training data set had 53 variables and 13737 observations
+and validation data set had 53 variables and 5885 observations.
+
+## Cross-Validation
+
+Splitting the training set into traning/testing sets and building model on training set. The evaluation is done on testing set.The process is repeated , the average the estimated errors.The cross-validation is used 
+
+1. to pick variables to include in the model,
+2. to pick the type of predication function to use,
+3. to pick parameters in the prediction function, and
+4. comparing different predictors.
+Cross validation is done for each model with K=3.
+
+## Data Modelling  
+
+Four models will be built for this project and pick the one which provides the best accuracy.
+* 1. Decision tree(rpart)
+* 2. Gradient boosting tree(GBM)
+* 3. Random Forest (RF)
+* 4. Support Vector Machine (SVM) 
+
+```{r , echo=TRUE}
+
+fitControl <- trainControl(method='cv', number = 5)
+
+```
+
+
+
+# Prediction models
+
+## a) Decision Tree Model
+
+```{r , echo=TRUE}
+
+# Model fit
+set.seed(1234)
+RPART <- train(  classe ~ .,  data=training,  trControl=fitControl,  method='rpart')
+save(RPART, file='./ModelFitRPART.RData')
+
+# Prediction on validation data set
+predRPART <- predict(RPART, newdata=validity)
+cmRPART <-confusionMatrix(predRPART, factor(validity$classe))
+cmRPART
+```
+
+
+```{r , echo=TRUE}
+
+# Plotting the model
+plot(RPART)
+```
+
+
+## b) Generalized Boosted Model
+
+```{r , echo=TRUE}
+
+# Model fit
+set.seed(1234)
+GBM <- train(  classe ~ .,   data=training,  trControl=fitControl,  method='gbm',verbose = FALSE)
+save(GBM, file='./ModelFitGBM.RData')
+
+# Prediction on validation data set
+predGBM <- predict(GBM, newdata=validity)
+cmGBM <-confusionMatrix(predGBM, factor(validity$classe))
+cmGBM
+```
+ 
+ 
+```{r , echo=TRUE}
+
+# Plotting the model
+plot(GBM)
+```
+
+##  c) Random Forest Model
+
+```{r , echo=TRUE}
+
+# Model fit
+set.seed(1234)
+RF <- train(  classe ~ .,   data=training,  trControl=fitControl,  method='rf',  ntree=100)
+save(RF, file='./ModelFitRF.RData')
+
+# Prediction on validation data set
+predRF <- predict(RF, newdata=validity)
+cmRF <-confusionMatrix(predRF, factor(validity$classe))
+cmRF
+```
+
+
+```{r , echo=TRUE}
+
+# Plotting the model
+plot(RF)
+```
+
+## d) Support Vector Machine Model
+
+```{r , echo=TRUE}
+
+# Model fit
+set.seed(1234)
+SVM <- train(  classe ~ .,   data=training,  trControl=fitControl,  method='svmLinear')
+save(SVM, file='./ModelFitSVM.RData')
+
+# Prediction on validation data set
+predSVM <- predict(SVM, newdata=validity)
+cmSVM <-confusionMatrix(predSVM, factor(validity$classe))
+cmSVM
+```
+
+## Results- Accuracy and out of sample error:
+
+```{r , echo=TRUE}
+accuracyResults <- data.frame(Mod = c('RPART', 'GBM', 'RF', 'SVM'),
+  Accuracy = rbind(cmRPART$overall[1], cmGBM$overall[1], cmRF$overall[1], cmSVM$overall[1])
+)
+print(accuracyResults)
+```
+
+Of the four models (RPART, SDM,RF & SVM) used, the random forest (RF) was the model out performed and being the best with  accuracy of 0.9943925 and out of sample error of  0.0056075. RF model can be used to perform in the test data.
+
+## Applying the best model (RF) to the Test data set:
+
+```{r , echo=TRUE}
+predTest <- predict(RF, test )
+
+print(predTest)
+```
